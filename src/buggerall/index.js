@@ -44,6 +44,9 @@ require("time");
 var getJSON = require("./util").getJSON;
 var _ = require("underscore")._;
 
+exports.VERSION = "0.1";
+exports.SERIALIZER_VERSION = 1;
+
 exports.Query = function(opts) {
     this._queryCount = 0;
     
@@ -111,7 +114,34 @@ exports.Query.prototype = {
     _loadHistory: function(bug) {
         var url = this.apiURL + "bug/" + bug.id + "/history";
         this.getJSON(url, bug._historyResult.bind(bug));
+    },
+    
+    serialize: function() {
+        var data = {
+            _version: exports.SERIALIZER_VERSION
+        };
+        Object.keys(this.result).forEach(function(bugId) {
+            data[bugId] = _serialize(this.result[bugId]);
+        }.bind(this));
+        return JSON.stringify(data);
     }
+};
+
+exports.getCachedResult = function(url, callback) {
+    getJSON(url, function(data) {
+        if (data._version != exports.SERIALIZER_VERSION) {
+            throw new Error("bugger all! I don't know how to handle data from version: " + data._version);
+        }
+        var result = {};
+        
+        Object.keys(data).forEach(function(key) {
+            if (key.substring(0, 1) == "_") {
+                return;
+            }
+            result[key] = _unserialize(data[key]);
+        });
+        callback(result);
+    });
 };
 
 exports.Attachment = function(data) {
@@ -171,6 +201,85 @@ exports.Change = function(bug, data) {
             this[key] = data[key];
         }
     }
+};
+
+var _serialize = function(obj) {
+    if (obj instanceof Array) {
+        var arrayData = [];
+        obj.forEach(function(item) {
+            if (item instanceof Object) {
+                arrayData.push(_serialize(item));
+            } else {
+                arrayData.push(item);
+            }
+        });
+        return arrayData;
+    }
+    
+    var objData = {
+    };
+    if (obj instanceof exports.Bug) {
+        objData._type = "Bug";
+    } else if (obj instanceof exports.Attachment) {
+        objData._type = "Attachment";
+    } else if (obj instanceof exports.ChangeSet) {
+        objData._type = "ChangeSet";
+    } else if (obj instanceof exports.Change) {
+        objData._type = "Change";
+    } else if (obj instanceof Date) {
+        objData._type = "Date";
+        // we need to eliminate the .000 milliseconds because date.js doesn't
+        // parse it properly, despite being the one generating it!
+        objData.value = obj.toISOString().replace(".000", "");
+        return objData;
+    }
+    Object.keys(obj).forEach(function(key) {
+        var item = obj[key];
+        if (item instanceof Object) {
+            objData[key] = _serialize(item);
+        } else {
+            objData[key] = item;
+        }
+    });
+    return objData;
+};
+
+var _unserialize = function(obj) {
+    if (obj instanceof Array) {
+        var arrayData = [];
+        obj.forEach(function(item) {
+            if (item instanceof Object) {
+                arrayData.push(_unserialize(item));
+            } else {
+                arrayData.push(item);
+            }
+        });
+        return arrayData;
+    }
+    
+    var objData;
+    
+    if (obj._type) {
+        if (obj._type == "Date") {
+            return Date.parse(obj.value);
+        }
+        objData = new exports[obj._type]();
+    } else {
+        objData = {};
+    }
+    
+    Object.keys(obj).forEach(function(key) {
+        if (key.substring(0, 1) == "_") {
+            return;
+        }
+        var item = obj[key];
+        if (item instanceof Object) {
+            objData[key] = _unserialize(item);
+        } else {
+            objData[key] = obj[key];
+        }
+    });
+    return objData;
 };
 
 });

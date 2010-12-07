@@ -1,7 +1,7 @@
 <html>
   <head>
     <title>Simple buggerall test</title>
-    <script type="text/javascript" src="support/require-jquery-1.4.4.js"></script>
+    <script type="text/javascript" src="../support/require-jquery-1.4.4.js"></script>
     <script type="text/javascript">
       require({
         paths: {
@@ -11,13 +11,12 @@
       ["buggerall/index", "underscore"],
       function(buggerall, underscore) {
         var _ = underscore._;
-        var bugTmpl = _.template('<li><%= bug.link %> <%= bug.summary %></li>');
-        var q = new buggerall.Query({query: 'component=Developer%20Tools&product=Firefox&limit=5',
-          fields: "id,summary"});
-        q.run(function() {
+        var bugTmpl = _.template('<li><%= bug.link %> <%= bug.summary %> (<%= bug.last_change_time %>)</li>');
+        buggerall.getCachedResult("cache.json", function(result) {
+          window.result = result;
           var body = "<h1>5 Assorted Developer Tools Bugs</h1><ul>";
-          Object.keys(q.result).forEach(function(bugId) {
-            var bug = q.result[bugId];
+          Object.keys(result).forEach(function(bugId) {
+            var bug = result[bugId];
             body += bugTmpl({bug: bug});
           });
           body += "</ul>";

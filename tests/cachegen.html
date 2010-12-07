@@ -1,0 +1,25 @@
+<html>
+  <head>
+    <title>Generate cached data</title>
+    <script type="text/javascript" src="../support/require-jquery-1.4.4.js"></script>
+    <script type="text/javascript">
+      require({
+        paths: {
+          buggerall: "../src/buggerall"
+        }
+      },
+      ["buggerall/index"],
+      function(buggerall) {
+        q = new buggerall.Query({query: 'component=Developer%20Tools&product=Firefox&limit=5',
+          fields: "id,summary,last_change_time"});
+        q.run(function() {
+          var body = "<pre>" + q.serialize().replace("<", "&lt;").replace(">", "&gt;") + "</pre>";
+          $('body').html(body);
+        });
+      });
+    </script>
+  </head>
+  <body>
+    <p>Retrieving some data...</p>
+  </body>
+</html>
