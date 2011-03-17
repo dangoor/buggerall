@@ -52,7 +52,6 @@ exports.Query = function(opts) {
     
     this.apiURL = opts.apiURL || 'https://api-dev.bugzilla.mozilla.org/latest/';
     this.viewURL = opts.viewURL || 'https://bugzilla.mozilla.org/show_bug.cgi?id=';
-    this.linkTemplate = opts.linkTemplate ? _.template(opts.linkTemplate) : _.template('<a href="<%= viewURL %>" target="_blank"><%= bug.id %></a>');
     if (opts.query) {
         this.query = opts.query;
     }
@@ -62,10 +61,11 @@ exports.Query = function(opts) {
     if (opts.fields) {
         this.query += "&include_fields=" + opts.fields;
     } else {
-        this.query += "&include_fields=id,status,summary,cf_blocking_20,attachments,keywords,whiteboard,resolution,assigned_to,depends_on,last_change_time,creation_time";
+        this.query += "&include_fields=id,status,summary,attachments,keywords,whiteboard,resolution,assigned_to,depends_on,last_change_time,creation_time";
     }
     
     this.includeHistory = opts.includeHistory;
+    this.whitespace = opts.whitespace;
     
     this.result = undefined;
 };
@@ -94,10 +94,6 @@ exports.Query.prototype = {
         var result = this.result = {};
         data.bugs.forEach(function(bugData) {
             var bug = result[bugData.id] = new exports.Bug(bugData);
-            bug.link = this.linkTemplate({
-                viewURL: this.viewURL + bug.id,
-                bug: bug
-            });
             if (this.includeHistory) {
                 this._loadHistory(bug);
             }
@@ -123,7 +119,11 @@ exports.Query.prototype = {
         Object.keys(this.result).forEach(function(bugId) {
             data[bugId] = _serialize(this.result[bugId]);
         }.bind(this));
-        return JSON.stringify(data);
+        if (this.whitespace) {
+            return JSON.stringify(data, null, 1);
+        } else {
+            return JSON.stringify(data);
+        }
     }
 };
 
