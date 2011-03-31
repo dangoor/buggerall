@@ -146,7 +146,7 @@ exports.getCachedResult = function(url, callback) {
 
 exports.Attachment = function(data) {
     for (var key in data) {
-        if (key == "creation_time") {
+        if (key == "creation_time" || key == "last_change_time") {
             this[key] = Date.parse(data[key]);
         } else {
             this[key] = data[key];
@@ -175,6 +175,23 @@ exports.Bug.prototype = {
         data.history.forEach(function(changeset) {
             history.push(new exports.ChangeSet(this, changeset));
         }.bind(this));
+    },
+    
+    getLatestPatch: function() {
+        if (!this.attachments) {
+            return null;
+        }
+        
+        var latest = null;
+        _.values(this.attachments).forEach(function(attachment) {
+            if (!attachment.is_patch) {
+                return;
+            }
+            if (!latest || attachment.last_change_time > latest.last_change_time) {
+                latest = attachment;
+            }
+        });
+        return latest;
     }
 };
 
