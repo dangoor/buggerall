@@ -182,7 +182,7 @@ exports.Bug.prototype = {
         
         var latest = null;
         _.values(this.attachments).forEach(function(attachment) {
-            if (!attachment.is_patch) {
+            if (!attachment.is_patch || attachment.is_obsolete) {
                 return;
             }
             if (!latest || attachment.last_change_time > latest.last_change_time) {
