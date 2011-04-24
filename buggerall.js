@@ -36,15 +36,13 @@
  * ***** END LICENSE BLOCK ***** */
 
 
-define(function(require, exports, module) {
+(function(win) {
 
-require("date");
-require("time");
+var exports = win.buggerall = {};
 
-var getJSON = require("./util").getJSON;
-var _ = require("underscore")._;
+var getJSON = $.getJSON;
 
-exports.VERSION = "0.1";
+exports.VERSION = "0.2";
 exports.SERIALIZER_VERSION = 1;
 
 exports.Query = function(opts) {
@@ -299,4 +297,4 @@ var _unserialize = function(obj) {
     return objData;
 };
 
-});
+})(this);
