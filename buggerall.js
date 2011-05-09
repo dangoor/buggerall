@@ -36,14 +36,16 @@
    * the terms of any one of the MPL, the GPL or the LGPL.
    *
    * ***** END LICENSE BLOCK ***** *
-  */  var Attachment, Bug, Change, ChangeSet, Query, exports, getJSON, _serialize, _unserialize;
-  var __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
+  */  var Attachment, Bug, Change, ChangeSet, History, Query, ajax, exports, getJSON, _serialize, _unserialize;
+  var __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; }, __hasProp = Object.prototype.hasOwnProperty;
   exports = this.buggerall = {};
   getJSON = $.getJSON;
+  ajax = $.ajax;
   exports.VERSION = "0.2";
   exports.SERIALIZER_VERSION = 1;
   exports.Query = Query = (function() {
     function Query(opts) {
+      this._queryDone = __bind(this._queryDone, this);;
       this._bugResult = __bind(this._bugResult, this);;      this._queryCount = 0;
       this.apiURL = opts.apiURL || 'https://api-dev.bugzilla.mozilla.org/latest/';
       this.viewURL = opts.viewURL || 'https://bugzilla.mozilla.org/show_bug.cgi?id=';
@@ -58,21 +60,42 @@
       } else {
         this.query += "&include_fields=id,status,summary,attachments,keywords,whiteboard,resolution,assigned_to,depends_on,last_change_time,creation_time";
       }
+      this.historyCacheURL = opts.historyCacheURL;
       this.includeHistory = opts.includeHistory;
       this.whitespace = opts.whitespace;
       this.result = void 0;
     }
     Query.prototype.getJSON = function(url, callback) {
-      this._queryCount++;
-      return getJSON(url, __bind(function(data) {
+      var error, params, success;
+      if (typeof url !== "object") {
+        params = {
+          url: url,
+          success: callback
+        };
+      } else {
+        params = url;
+      }
+      params.dataType = 'json';
+      success = params.success;
+      params.success = __bind(function(data) {
         if (!data) {
           this.error = 'No data returned... bad query, perhaps? Go to <a target="_blank" href="' + lastURL + '">' + url + '</a> to try out the query (opens in a new window).';
           this._callback(this);
+          this._queryDone();
           return;
         }
-        callback(data);
+        success(data);
         return this._queryDone();
-      }, this));
+      }, this);
+      error = params.error;
+      params.error = __bind(function() {
+        if (error) {
+          error();
+        }
+        return this._queryDone();
+      }, this);
+      this._queryCount++;
+      return ajax(params);
     };
     Query.prototype.run = function(callback) {
       var url;
@@ -94,14 +117,44 @@
     };
     Query.prototype._queryDone = function() {
       this._queryCount--;
+      console.log("Query count: ", this._queryCount);
       if (!this._queryCount && this._callback) {
         return this._callback(this);
       }
     };
-    Query.prototype._loadHistory = function(bug) {
+    Query.prototype._loadHistory = function(bug, forceBugzilla) {
       var url;
-      url = this.apiURL + "bug/" + bug.id + "/history";
-      return this.getJSON(url, bug._historyResult);
+      if (forceBugzilla == null) {
+        forceBugzilla = false;
+      }
+      if (!forceBugzilla && this.historyCacheURL) {
+        url = this.historyCacheURL + ("" + bug.id + ".json");
+        console.log("Want to check for history here:", url);
+        return this.getJSON({
+          url: url,
+          success: function(data) {
+            return bug.history = _unserialize(data);
+          },
+          error: __bind(function() {
+            return this._loadHistory(bug, true);
+          }, this)
+        });
+      } else {
+        url = this.apiURL + "bug/" + bug.id + "/history";
+        console.log("retrieving official history", url);
+        return this.getJSON(url, function(data) {
+          var changeset, changesets, history, _i, _len, _results;
+          history = bug.history = new History(bug.last_change_time);
+          console.log("History for ", bug.id, " set to ", history);
+          changesets = history.changes;
+          _results = [];
+          for (_i = 0, _len = history.length; _i < _len; _i++) {
+            changeset = history[_i];
+            _results.push(changesets.push(new ChangeSet(bug, changeset)));
+          }
+          return _results;
+        });
+      }
     };
     Query.prototype.serialize = function() {
       var bugId, data;
@@ -151,7 +204,7 @@
   })();
   exports.Bug = Bug = (function() {
     function Bug(data) {
-      this._historyResult = __bind(this._historyResult, this);;      var attachment, attachments, key, _i, _len, _ref;
+      var attachment, attachments, key, _i, _len, _ref;
       for (key in data) {
         if (key === "attachments") {
           attachments = this.attachments = {};
@@ -167,17 +220,6 @@
         }
       }
     }
-    Bug.prototype._historyResult = function(data) {
-      var changeset, history, _i, _len, _ref, _results;
-      history = this.history = [];
-      _ref = data.history;
-      _results = [];
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        changeset = _ref[_i];
-        _results.push(history.push(new ChangeSet(this, changeset)));
-      }
-      return _results;
-    };
     Bug.prototype.getLatestPatch = function() {
       var attachment, id, latest, _ref;
       if (!this.attachments) {
@@ -197,6 +239,25 @@
       return latest;
     };
     return Bug;
+  })();
+  exports.History = History = (function() {
+    function History(lastChangeTime) {
+      this.lastChangeTime = lastChangeTime;
+      this.changesets = [];
+    }
+    History.prototype.serialize = function(includeWhitespace) {
+      var obj;
+      if (includeWhitespace == null) {
+        includeWhitespace = true;
+      }
+      obj = _serialize(this);
+      if (includeWhitespace) {
+        return JSON.stringify(obj, null, 1);
+      } else {
+        return JSON.stringify(obj);
+      }
+    };
+    return History;
   })();
   exports.ChangeSet = ChangeSet = (function() {
     function ChangeSet(bug, data) {
@@ -232,7 +293,7 @@
     return Change;
   })();
   _serialize = function(obj) {
-    var arrayData, item, key, objData, _i, _j, _len, _len2;
+    var arrayData, item, key, objData, _i, _len;
     if (obj instanceof Array) {
       arrayData = [];
       for (_i = 0, _len = obj.length; _i < _len; _i++) {
@@ -254,14 +315,19 @@
       objData._type = "ChangeSet";
     } else if (obj instanceof exports.Change) {
       objData._type = "Change";
+    } else if (obj instanceof exports.History) {
+      objData._type = "History";
     } else if (obj instanceof Date) {
       objData._type = "Date";
       objData.value = obj.toISOString().replace(".000", "");
       return objData;
     }
-    for (_j = 0, _len2 = obj.length; _j < _len2; _j++) {
-      key = obj[_j];
+    for (key in obj) {
+      if (!__hasProp.call(obj, key)) continue;
       item = obj[key];
+      if (objData._type === "Bug" && key === "history") {
+        continue;
+      }
       if (item instanceof Object) {
         objData[key] = _serialize(item);
       } else {

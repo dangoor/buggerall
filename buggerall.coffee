@@ -40,6 +40,7 @@
 exports = @buggerall = {}
 
 getJSON = $.getJSON
+ajax = $.ajax
 
 exports.VERSION = "0.2"
 exports.SERIALIZER_VERSION = 1
@@ -61,23 +62,43 @@ exports.Query = class Query
         else
             @query += "&include_fields=id,status,summary,attachments,keywords,whiteboard,resolution,assigned_to,depends_on,last_change_time,creation_time"
 
-        
+        # URL to directory containing JSON files for history
+        # buggerall will load history data from here first
+        # and then from bugzilla if that data is out of date
+        @historyCacheURL = opts.historyCacheURL
         @includeHistory = opts.includeHistory
         @whitespace = opts.whitespace
         
         @result = undefined
 
     getJSON: (url, callback) ->
-        @_queryCount++
-        getJSON(url, (data) =>
+        if typeof(url) != "object"
+            params = 
+                url: url
+                success: callback
+        else
+            params = url
+        
+        params.dataType = 'json'
+        success = params.success
+        params.success = (data) =>
             if !data
                 @.error = 'No data returned... bad query, perhaps? Go to <a target="_blank" href="' + lastURL + '">' + url + '</a> to try out the query (opens in a new window).'
                 @_callback this
+                @_queryDone()
                 return
 
-            callback data
+            success data
             @_queryDone()
-        )
+        
+        error = params.error
+        params.error = () =>
+            if error
+                error()
+            @_queryDone()
+        
+        @_queryCount++
+        ajax params
     
     run: (callback) ->
         url = this.apiURL + 'bug?' + this.query
@@ -91,14 +112,32 @@ exports.Query = class Query
             if @includeHistory
                 @_loadHistory bug
 
-    _queryDone: () ->
+    _queryDone: () =>
         @_queryCount--
+        console.log "Query count: ", @_queryCount
         if not @_queryCount and @_callback
             @_callback @
     
-    _loadHistory: (bug) ->
-        url = @apiURL + "bug/" + bug.id + "/history"
-        @getJSON url, bug._historyResult
+    _loadHistory: (bug, forceBugzilla=false) ->
+        if not forceBugzilla and @historyCacheURL
+            url = @historyCacheURL + "#{bug.id}.json"
+            console.log "Want to check for history here:", url
+            @getJSON 
+                url: url
+                success: (data) ->
+                    bug.history = _unserialize data
+                error: () =>
+                    @_loadHistory(bug, true)                
+        else
+            url = @apiURL + "bug/" + bug.id + "/history"
+            console.log "retrieving official history", url
+            @getJSON url, (data) ->
+                history = bug.history = new History(bug.last_change_time)
+                console.log "History for ", bug.id, " set to ", history
+                changesets = history.changes
+                for changeset in history
+                    changesets.push new ChangeSet(bug, changeset)
+
     
     serialize: () ->
         data =
@@ -149,11 +188,6 @@ exports.Bug = class Bug
             else
                 @[key] = data[key]
 
-    _historyResult: (data) =>
-        history = @history = []
-        for changeset in data.history
-            history.push new ChangeSet(@, changeset)
-    
     getLatestPatch: () ->
         if not @attachments
             return null
@@ -168,6 +202,18 @@ exports.Bug = class Bug
 
         return latest
 
+exports.History = class History
+    constructor: (lastChangeTime) ->
+        @lastChangeTime = lastChangeTime
+        @changesets = []
+    
+    serialize: (includeWhitespace=true) ->
+        obj = _serialize @
+        if includeWhitespace
+            JSON.stringify obj, null, 1
+        else
+            JSON.stringify obj
+    
 exports.ChangeSet = class ChangeSet
     constructor: (bug, data) ->
         for key of data
@@ -208,6 +254,8 @@ _serialize = (obj) ->
         objData._type = "ChangeSet"
     else if obj instanceof exports.Change
         objData._type = "Change"
+    else if obj instanceof exports.History
+        objData._type = "History"
     else if obj instanceof Date
         objData._type = "Date"
         # we need to eliminate the .000 milliseconds because date.js doesn't
@@ -215,8 +263,11 @@ _serialize = (obj) ->
         objData.value = obj.toISOString().replace ".000", ""
         return objData
 
-    for key in obj
-        item = obj[key]
+    for own key, item of obj
+        # special handling for history, which is serialized
+        # separately for speed's sake
+        if objData._type == "Bug" and key == "history"
+            continue
         if item instanceof Object
             objData[key] = _serialize item
         else
