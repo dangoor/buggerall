@@ -114,14 +114,12 @@ exports.Query = class Query
 
     _queryDone: () =>
         @_queryCount--
-        console.log "Query count: ", @_queryCount
         if not @_queryCount and @_callback
             @_callback @
     
     _loadHistory: (bug, forceBugzilla=false) ->
         if not forceBugzilla and @historyCacheURL
             url = @historyCacheURL + "#{bug.id}.json"
-            console.log "Want to check for history here:", url
             @getJSON 
                 url: url
                 success: (data) ->
@@ -130,14 +128,16 @@ exports.Query = class Query
                     @_loadHistory(bug, true)                
         else
             url = @apiURL + "bug/" + bug.id + "/history"
-            console.log "retrieving official history", url
             @getJSON url, (data) ->
                 history = bug.history = new History(bug.last_change_time)
-                console.log "History for ", bug.id, " set to ", history
                 changesets = history.changes
                 for changeset in history
                     changesets.push new ChangeSet(bug, changeset)
-
+    
+    merge: (otherQ) ->
+        for bugId of otherQ.result
+            if not @result[bugId]
+                @result[bugId] = otherQ.result[bugId]
     
     serialize: () ->
         data =

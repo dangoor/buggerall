@@ -117,7 +117,6 @@
     };
     Query.prototype._queryDone = function() {
       this._queryCount--;
-      console.log("Query count: ", this._queryCount);
       if (!this._queryCount && this._callback) {
         return this._callback(this);
       }
@@ -129,7 +128,6 @@
       }
       if (!forceBugzilla && this.historyCacheURL) {
         url = this.historyCacheURL + ("" + bug.id + ".json");
-        console.log("Want to check for history here:", url);
         return this.getJSON({
           url: url,
           success: function(data) {
@@ -141,11 +139,9 @@
         });
       } else {
         url = this.apiURL + "bug/" + bug.id + "/history";
-        console.log("retrieving official history", url);
         return this.getJSON(url, function(data) {
           var changeset, changesets, history, _i, _len, _results;
           history = bug.history = new History(bug.last_change_time);
-          console.log("History for ", bug.id, " set to ", history);
           changesets = history.changes;
           _results = [];
           for (_i = 0, _len = history.length; _i < _len; _i++) {
@@ -155,6 +151,14 @@
           return _results;
         });
       }
+    };
+    Query.prototype.merge = function(otherQ) {
+      var bugId, _results;
+      _results = [];
+      for (bugId in otherQ.result) {
+        _results.push(!this.result[bugId] ? this.result[bugId] = otherQ.result[bugId] : void 0);
+      }
+      return _results;
     };
     Query.prototype.serialize = function() {
       var bugId, data;
