@@ -130,8 +130,8 @@ exports.Query = class Query
             url = @apiURL + "bug/" + bug.id + "/history"
             @getJSON url, (data) ->
                 history = bug.history = new History(bug.last_change_time)
-                changesets = history.changes
-                for changeset in history
+                changesets = history.changesets
+                for changeset in data.history
                     changesets.push new ChangeSet(bug, changeset)
     
     merge: (otherQ) ->

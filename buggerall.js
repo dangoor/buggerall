@@ -140,12 +140,13 @@
       } else {
         url = this.apiURL + "bug/" + bug.id + "/history";
         return this.getJSON(url, function(data) {
-          var changeset, changesets, history, _i, _len, _results;
+          var changeset, changesets, history, _i, _len, _ref, _results;
           history = bug.history = new History(bug.last_change_time);
-          changesets = history.changes;
+          changesets = history.changesets;
+          _ref = data.history;
           _results = [];
-          for (_i = 0, _len = history.length; _i < _len; _i++) {
-            changeset = history[_i];
+          for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+            changeset = _ref[_i];
             _results.push(changesets.push(new ChangeSet(bug, changeset)));
           }
           return _results;
