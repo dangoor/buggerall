@@ -243,6 +243,12 @@
       }
       return latest;
     };
+    Bug.prototype.loadHistory = function(url, callback) {
+      return getJSON(url, __bind(function(data) {
+        this.history = _unserialize(data);
+        return callback(this);
+      }, this));
+    };
     return Bug;
   })();
   exports.History = History = (function() {

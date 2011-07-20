@@ -201,6 +201,11 @@ exports.Bug = class Bug
                 latest = attachment
 
         return latest
+    
+    loadHistory: (url, callback) ->
+        getJSON url, (data) =>
+            @history = _unserialize(data)
+            callback(@)
 
 exports.History = class History
     constructor: (lastChangeTime) ->
