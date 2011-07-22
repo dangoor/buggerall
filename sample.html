@@ -13,8 +13,12 @@
 
                 // CHANGE THE QUERY BELOW
                 // if you would like to see different results.
+                var queryString = "product=Firefox&component=Developer%20Tools&whiteboard=[minotaur]";
+                $('#query').html(queryString);
+
                 var query = new buggerall.Query({
-                    query: "product=Firefox&component=Developer%20Tools&whiteboard=[minotaur]"
+                    query: queryString,
+                    fields: "id,creation_time,attachments,history"
                 });
 
                 query.run(function(query) {
@@ -22,7 +26,7 @@
                     var result = "<table><thead><th>bug</th><th>event type</th><th>timestamp</th><th>details</th></thead><tbody>";
                     var timeline = query.timeline();
                     timeline.events.forEach(function(event) {
-                        result += "<tr><td>" + event.bugId + "</td><td>" + event.type + "</td><td>" + event.when + "</td></tr>";
+                        result += "<tr><td><a href=\"" + query.viewURL + event.bugId + "\">" + event.bugId + "</a></td><td>" + event.type + "</td><td>" + event.when + "</td><td>" + event.detail + "</td></tr>";
                     });
                     result += "</tbody></table>";
 
@@ -35,7 +39,7 @@
     </head>
     <body>
         <h1>Buggerall Sample</h1>
-        <div id="loading">
+        <div id="loading" style="font-size: 200%; font-weight: bold;">
             Running a live query against bugzilla.mozilla.org
         </div>
         <div>
@@ -43,6 +47,10 @@
             set of bugs in Bugzilla. Change the query in the JavaScript above to see different
             results.
         </div>
+
+        <div id="query">
+        </div>
+
         <div id="result">
         </div>
     </body>

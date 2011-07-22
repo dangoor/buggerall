@@ -74,6 +74,11 @@ buggerall.Query = class Query
         @historyCacheURL = opts.historyCacheURL
         @includeHistory = opts.includeHistory
         @whitespace = opts.whitespace
+
+        # Special support for computing the latest comment, which requires making
+        # separate requests in order to avoid download all of the comment data
+        # which can be quite large.
+        @computeLatestComment = opts.computeLatestComment
         
         @result = undefined
 
@@ -135,10 +140,7 @@ buggerall.Query = class Query
         else
             url = @apiURL + "bug/" + bug.id + "/history"
             @getJSON url, (data) ->
-                history = bug.history = new History(bug.last_change_time)
-                changesets = history.changesets
-                for changeset in data.history
-                    changesets.push new ChangeSet(bug, changeset)
+                bug._setHistoryFromQueryResult(data.history)
     
     merge: (otherQ) ->
         for bugId of otherQ.result
@@ -192,6 +194,11 @@ buggerall.Bug = class Bug
                 attachments = @attachments = {}
                 for attachment in data[key]
                     attachments[attachment.id] = new Attachment(attachment)
+            else if key == "history"
+                if data[key] instanceof History
+                    @[key] = data[key]
+                else
+                    @_setHistoryFromQueryResult(data[key])
             else if key == "creation_time" or key == "last_change_time"
                 @[key] = Date.parse data[key]
             else
@@ -215,6 +222,15 @@ buggerall.Bug = class Bug
         getJSON url, (data) =>
             @history = _unserialize(data)
             callback(@)
+    
+    # Takes the data returned from a query and turns it into a proper
+    # History object.
+    _setHistoryFromQueryResult: (data) ->
+        history = @history = new History(@last_change_time)
+        changesets = history.changesets
+        for changeset in data
+            changesets.push new ChangeSet(@, changeset)
+
 
 buggerall.History = class History
     constructor: (lastChangeTime) ->
@@ -332,7 +348,7 @@ _unserialize = (obj) ->
 # * New patch
 # * r-/r+/sr-/sr+ status changes
 # * Whiteboard change
-# * description change
+# * summary change
 buggerall.Timeline = class Timeline
     
     # Parameters:
@@ -347,10 +363,42 @@ buggerall.Timeline = class Timeline
         # 30 days * 24 hours/day * 60 min/hour * 60 sec/min * 1000 milli/sec
         cutoff = new Date().getTime() - 30*24*60*60*1000
 
+        reviewRequestFlag = /^review\?\((.*)\)$/
+        reviewFlag = /^review([+-])$/;
+
         for bugId, bug of result
             # check for new bug
             if bug.creation_time? and bug.creation_time.getTime() > cutoff
-                events.push(new buggerall.TimelineEntry(bugId, bug.creation_time, "newBug"))
+                events.push(new TimelineEntry(bugId, bug.creation_time, "newBug", ""))
+            
+            # events pulled from bug history
+            if bug.history?
+                for changeset in bug.history.changesets
+                    if changeset.change_time < cutoff
+                        continue
+
+                    for change in changeset.changes
+                        if change.field_name == "whiteboard"
+                            events.push(new TimelineEntry(bugId, changeset.change_time, "whiteboard", change.added))
+                        
+                        else if change.field_name == "summary"
+                            events.push(new TimelineEntry(bugId, changeset.change_time, "summary", change.added))
+                        
+                        else if change.field_name == "flag"
+                            attachmentInfo = if change.attachment? then " for " + change.attachment.description else ""
+                            reviewRequestFlagResult = reviewRequestFlag.exec(change.added)
+                            reviewFlagResult = reviewFlag.exec(change.added)
+                            if reviewRequestFlagResult
+                                events.push(new TimelineEntry(bugId, changeset.change_time, "review", "r? " +reviewRequestFlagResult[1] + attachmentInfo))
+                            else if reviewFlagResult
+                                events.push(new TimelineEntry(bugId, changeset.change_time, "review", "r" + reviewFlagResult[1] + attachmentInfo))
+            
+            # new patch check
+            if bug.attachments?
+                for id, attachment of bug.attachments
+                    if attachment.creation_time < cutoff or attachment.is_obsolete or not attachment.is_patch
+                        continue
+                    events.push(new TimelineEntry(bugId, attachment.creation_time, "newPatch", attachment.description))
         
         # sort the final result in descending timestamp order
         # (most recent first)
@@ -367,8 +415,8 @@ buggerall.Timeline = class Timeline
 #
 # * `bugId`: bug id
 # * `when`: when the event happened – a Date object
-# * `type`: one of `newBug`, `newComment`, `newPatch`, `review`, `whiteboard`, `description`
-# * `detail`: any extra information you'd like displayed for the user
+# * `type`: one of `newBug`, `newComment`, `newPatch`, `review`, `whiteboard`, `summary`
+# * 'detail': string that is ready for display to the user containing detail about the event
 buggerall.TimelineEntry = class TimelineEntry
 
     constructor: (@bugId, @when, @type, @detail) ->

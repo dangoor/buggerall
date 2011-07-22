@@ -63,6 +63,7 @@
       this.historyCacheURL = opts.historyCacheURL;
       this.includeHistory = opts.includeHistory;
       this.whitespace = opts.whitespace;
+      this.computeLatestComment = opts.computeLatestComment;
       this.result = void 0;
     }
     Query.prototype.getJSON = function(url, callback) {
@@ -140,16 +141,7 @@
       } else {
         url = this.apiURL + "bug/" + bug.id + "/history";
         return this.getJSON(url, function(data) {
-          var changeset, changesets, history, _i, _len, _ref, _results;
-          history = bug.history = new History(bug.last_change_time);
-          changesets = history.changesets;
-          _ref = data.history;
-          _results = [];
-          for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-            changeset = _ref[_i];
-            _results.push(changesets.push(new ChangeSet(bug, changeset)));
-          }
-          return _results;
+          return bug._setHistoryFromQueryResult(data.history);
         });
       }
     };
@@ -224,6 +216,12 @@
             attachment = _ref[_i];
             attachments[attachment.id] = new Attachment(attachment);
           }
+        } else if (key === "history") {
+          if (data[key] instanceof History) {
+            this[key] = data[key];
+          } else {
+            this._setHistoryFromQueryResult(data[key]);
+          }
         } else if (key === "creation_time" || key === "last_change_time") {
           this[key] = Date.parse(data[key]);
         } else {
@@ -254,6 +252,17 @@
         this.history = _unserialize(data);
         return callback(this);
       }, this));
+    };
+    Bug.prototype._setHistoryFromQueryResult = function(data) {
+      var changeset, changesets, history, _i, _len, _results;
+      history = this.history = new History(this.last_change_time);
+      changesets = history.changesets;
+      _results = [];
+      for (_i = 0, _len = data.length; _i < _len; _i++) {
+        changeset = data[_i];
+        _results.push(changesets.push(new ChangeSet(this, changeset)));
+      }
+      return _results;
     };
     return Bug;
   })();
@@ -390,13 +399,52 @@
   };
   buggerall.Timeline = Timeline = (function() {
     function Timeline(result, daysback) {
-      var bug, bugId, cutoff, events;
+      var attachment, attachmentInfo, bug, bugId, change, changeset, cutoff, events, id, reviewFlag, reviewFlagResult, reviewRequestFlag, reviewRequestFlagResult, _i, _j, _len, _len2, _ref, _ref2, _ref3;
       events = this.events = [];
       cutoff = new Date().getTime() - 30 * 24 * 60 * 60 * 1000;
+      reviewRequestFlag = /^review\?\((.*)\)$/;
+      reviewFlag = /^review([+-])$/;
       for (bugId in result) {
         bug = result[bugId];
         if ((bug.creation_time != null) && bug.creation_time.getTime() > cutoff) {
-          events.push(new buggerall.TimelineEntry(bugId, bug.creation_time, "newBug"));
+          events.push(new TimelineEntry(bugId, bug.creation_time, "newBug", ""));
+        }
+        if (bug.history != null) {
+          _ref = bug.history.changesets;
+          for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+            changeset = _ref[_i];
+            if (changeset.change_time < cutoff) {
+              continue;
+            }
+            _ref2 = changeset.changes;
+            for (_j = 0, _len2 = _ref2.length; _j < _len2; _j++) {
+              change = _ref2[_j];
+              if (change.field_name === "whiteboard") {
+                events.push(new TimelineEntry(bugId, changeset.change_time, "whiteboard", change.added));
+              } else if (change.field_name === "summary") {
+                events.push(new TimelineEntry(bugId, changeset.change_time, "summary", change.added));
+              } else if (change.field_name === "flag") {
+                attachmentInfo = change.attachment != null ? " for " + change.attachment.description : "";
+                reviewRequestFlagResult = reviewRequestFlag.exec(change.added);
+                reviewFlagResult = reviewFlag.exec(change.added);
+                if (reviewRequestFlagResult) {
+                  events.push(new TimelineEntry(bugId, changeset.change_time, "review", "r? " + reviewRequestFlagResult[1] + attachmentInfo));
+                } else if (reviewFlagResult) {
+                  events.push(new TimelineEntry(bugId, changeset.change_time, "review", "r" + reviewFlagResult[1] + attachmentInfo));
+                }
+              }
+            }
+          }
+        }
+        if (bug.attachments != null) {
+          _ref3 = bug.attachments;
+          for (id in _ref3) {
+            attachment = _ref3[id];
+            if (attachment.creation_time < cutoff || attachment.is_obsolete || !attachment.is_patch) {
+              continue;
+            }
+            events.push(new TimelineEntry(bugId, attachment.creation_time, "newPatch", attachment.description));
+          }
         }
       }
       events.sort(function(a, b) {
