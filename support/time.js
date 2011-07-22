@@ -13,7 +13,7 @@
  * TimeSpan(days, hours, minutes, seconds, milliseconds);
  */
 
-define(function(require, exports, module) {
+(function(exports) {
     
 var TimeSpan = function (days, hours, minutes, seconds, milliseconds) {
     var attrs = "days hours minutes seconds milliseconds".split(/\s+/);
@@ -274,4 +274,4 @@ var TimePeriod = function (years, months, days, hours, minutes, seconds, millise
 exports.TimePeriod = TimePeriod;
 exports.TimeSpan = TimeSpan;
 
-});
+})(this);

@@ -37,15 +37,21 @@
  * ***** END LICENSE BLOCK ***** *
 ###
 
-exports = @buggerall = {}
+# Wow. Running this through Docco shows me just how poorly it's
+# documented. I'll work on fixing that as I go along. In the
+# meantime, sorry!
+
+#### Here we go!
+
+buggerall = @buggerall = {}
 
 getJSON = $.getJSON
 ajax = $.ajax
 
-exports.VERSION = "0.2"
-exports.SERIALIZER_VERSION = 1
+buggerall.VERSION = "0.3"
+buggerall.SERIALIZER_VERSION = 1
 
-exports.Query = class Query
+buggerall.Query = class Query
     constructor: (opts) -> 
         @_queryCount = 0
         
@@ -141,7 +147,7 @@ exports.Query = class Query
     
     serialize: () ->
         data =
-            _version: exports.SERIALIZER_VERSION
+            _version: buggerall.SERIALIZER_VERSION
 
         for bugId of @result
             data[bugId] = _serialize @result[bugId]
@@ -150,12 +156,15 @@ exports.Query = class Query
             return JSON.stringify data, null, 1
         else
             return JSON.stringify data
+    
+    timeline: (daysback=30) ->
+        new buggerall.Timeline(@.result, daysback)
 
-exports.getCachedResult = (url, callback) ->
+buggerall.getCachedResult = (url, callback) ->
     getJSON(url, (data) ->
         console.log "Have the data... gonna run with it"
-        if data._version != exports.SERIALIZER_VERSION
-            throw new Error("bugger all! I don't know how to handle data from version: #{data._version}. This is serializer version #{exports.SERIALIZER_VERSION}")
+        if data._version != buggerall.SERIALIZER_VERSION
+            throw new Error("bugger all! I don't know how to handle data from version: #{data._version}. This is serializer version #{buggerall.SERIALIZER_VERSION}")
 
         result = {}
         
@@ -168,7 +177,7 @@ exports.getCachedResult = (url, callback) ->
         callback result
     )
 
-exports.Attachment = class Attachment
+buggerall.Attachment = class Attachment
     constructor: (data) ->
         for key of data
             if key == "creation_time" or key == "last_change_time"
@@ -176,7 +185,7 @@ exports.Attachment = class Attachment
             else
                 @[key] = data[key]
 
-exports.Bug = class Bug
+buggerall.Bug = class Bug
     constructor: (data) ->
         for key of data
             if key == "attachments"
@@ -207,7 +216,7 @@ exports.Bug = class Bug
             @history = _unserialize(data)
             callback(@)
 
-exports.History = class History
+buggerall.History = class History
     constructor: (lastChangeTime) ->
         @lastChangeTime = lastChangeTime
         @changesets = []
@@ -219,7 +228,7 @@ exports.History = class History
         else
             JSON.stringify obj
     
-exports.ChangeSet = class ChangeSet
+buggerall.ChangeSet = class ChangeSet
     constructor: (bug, data) ->
         for key of data
             if key == "change_time"
@@ -231,7 +240,7 @@ exports.ChangeSet = class ChangeSet
             else
                 @[key] = data[key]
 
-exports.Change = class Change
+buggerall.Change = class Change
     constructor: (bug, data) ->
         for key of data
             if key == "attachment_id" and bug.attachments
@@ -253,13 +262,13 @@ _serialize = (obj) ->
 
     if obj instanceof Bug
         objData._type = "Bug"
-    else if obj instanceof exports.Attachment
+    else if obj instanceof buggerall.Attachment
         objData._type = "Attachment"
-    else if obj instanceof exports.ChangeSet
+    else if obj instanceof buggerall.ChangeSet
         objData._type = "ChangeSet"
-    else if obj instanceof exports.Change
+    else if obj instanceof buggerall.Change
         objData._type = "Change"
-    else if obj instanceof exports.History
+    else if obj instanceof buggerall.History
         objData._type = "History"
     else if obj instanceof Date
         objData._type = "Date"
@@ -310,3 +319,57 @@ _unserialize = (obj) ->
 
     return objData
 
+#### Timeline
+
+# The timeline makes it easy to gather the data for a simple, linear view
+# of events. The goal is to make it easy to scan for updates related
+# to a project.
+#
+# Events included:
+#
+# * New bug
+# * New comment (batched to show only the latest entry per bug per timeline)
+# * New patch
+# * r-/r+/sr-/sr+ status changes
+# * Whiteboard change
+# * description change
+buggerall.Timeline = class Timeline
+    
+    # Parameters:
+    #
+    # * `result`: query result, could be loaded from caches. Be sure to include
+    #    history if you want patch, whiteboard and status changes
+    # * `daysback`: how many days back in time should the timeline stretch
+    constructor: (result, daysback) ->
+        events = @events = []
+
+        # compute timestamp in milliseconds for 30 days ago
+        # 30 days * 24 hours/day * 60 min/hour * 60 sec/min * 1000 milli/sec
+        cutoff = new Date().getTime() - 30*24*60*60*1000
+
+        for bugId, bug of result
+            # check for new bug
+            if bug.creation_time? and bug.creation_time.getTime() > cutoff
+                events.push(new buggerall.TimelineEntry(bugId, bug.creation_time, "newBug"))
+        
+        # sort the final result in descending timestamp order
+        # (most recent first)
+        events.sort (a,b) ->
+            if a.when < b.when
+                return 1
+            else if a.when > b.when
+                return -1
+            return 0
+
+#### TimelineEntry
+
+# A single entry in the timeline. Has the following properties:
+#
+# * `bugId`: bug id
+# * `when`: when the event happened – a Date object
+# * `type`: one of `newBug`, `newComment`, `newPatch`, `review`, `whiteboard`, `description`
+# * `detail`: any extra information you'd like displayed for the user
+buggerall.TimelineEntry = class TimelineEntry
+
+    constructor: (@bugId, @when, @type, @detail) ->
+        

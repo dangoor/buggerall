@@ -36,14 +36,14 @@
    * the terms of any one of the MPL, the GPL or the LGPL.
    *
    * ***** END LICENSE BLOCK ***** *
-  */  var Attachment, Bug, Change, ChangeSet, History, Query, ajax, exports, getJSON, _serialize, _unserialize;
+  */  var Attachment, Bug, Change, ChangeSet, History, Query, Timeline, TimelineEntry, ajax, buggerall, getJSON, _serialize, _unserialize;
   var __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; }, __hasProp = Object.prototype.hasOwnProperty;
-  exports = this.buggerall = {};
+  buggerall = this.buggerall = {};
   getJSON = $.getJSON;
   ajax = $.ajax;
-  exports.VERSION = "0.2";
-  exports.SERIALIZER_VERSION = 1;
-  exports.Query = Query = (function() {
+  buggerall.VERSION = "0.3";
+  buggerall.SERIALIZER_VERSION = 1;
+  buggerall.Query = Query = (function() {
     function Query(opts) {
       this._queryDone = __bind(this._queryDone, this);;
       this._bugResult = __bind(this._bugResult, this);;      this._queryCount = 0;
@@ -164,7 +164,7 @@
     Query.prototype.serialize = function() {
       var bugId, data;
       data = {
-        _version: exports.SERIALIZER_VERSION
+        _version: buggerall.SERIALIZER_VERSION
       };
       for (bugId in this.result) {
         data[bugId] = _serialize(this.result[bugId]);
@@ -175,14 +175,20 @@
         return JSON.stringify(data);
       }
     };
+    Query.prototype.timeline = function(daysback) {
+      if (daysback == null) {
+        daysback = 30;
+      }
+      return new buggerall.Timeline(this.result, daysback);
+    };
     return Query;
   })();
-  exports.getCachedResult = function(url, callback) {
+  buggerall.getCachedResult = function(url, callback) {
     return getJSON(url, function(data) {
       var key, result;
       console.log("Have the data... gonna run with it");
-      if (data._version !== exports.SERIALIZER_VERSION) {
-        throw new Error("bugger all! I don't know how to handle data from version: " + data._version + ". This is serializer version " + exports.SERIALIZER_VERSION);
+      if (data._version !== buggerall.SERIALIZER_VERSION) {
+        throw new Error("bugger all! I don't know how to handle data from version: " + data._version + ". This is serializer version " + buggerall.SERIALIZER_VERSION);
       }
       result = {};
       for (key in data) {
@@ -194,7 +200,7 @@
       return callback(result);
     });
   };
-  exports.Attachment = Attachment = (function() {
+  buggerall.Attachment = Attachment = (function() {
     function Attachment(data) {
       var key;
       for (key in data) {
@@ -207,7 +213,7 @@
     }
     return Attachment;
   })();
-  exports.Bug = Bug = (function() {
+  buggerall.Bug = Bug = (function() {
     function Bug(data) {
       var attachment, attachments, key, _i, _len, _ref;
       for (key in data) {
@@ -251,7 +257,7 @@
     };
     return Bug;
   })();
-  exports.History = History = (function() {
+  buggerall.History = History = (function() {
     function History(lastChangeTime) {
       this.lastChangeTime = lastChangeTime;
       this.changesets = [];
@@ -270,7 +276,7 @@
     };
     return History;
   })();
-  exports.ChangeSet = ChangeSet = (function() {
+  buggerall.ChangeSet = ChangeSet = (function() {
     function ChangeSet(bug, data) {
       var change, changes, key, _i, _len, _ref;
       for (key in data) {
@@ -290,7 +296,7 @@
     }
     return ChangeSet;
   })();
-  exports.Change = Change = (function() {
+  buggerall.Change = Change = (function() {
     function Change(bug, data) {
       var key;
       for (key in data) {
@@ -320,13 +326,13 @@
     objData = {};
     if (obj instanceof Bug) {
       objData._type = "Bug";
-    } else if (obj instanceof exports.Attachment) {
+    } else if (obj instanceof buggerall.Attachment) {
       objData._type = "Attachment";
-    } else if (obj instanceof exports.ChangeSet) {
+    } else if (obj instanceof buggerall.ChangeSet) {
       objData._type = "ChangeSet";
-    } else if (obj instanceof exports.Change) {
+    } else if (obj instanceof buggerall.Change) {
       objData._type = "Change";
-    } else if (obj instanceof exports.History) {
+    } else if (obj instanceof buggerall.History) {
       objData._type = "History";
     } else if (obj instanceof Date) {
       objData._type = "Date";
@@ -382,4 +388,35 @@
     }
     return objData;
   };
+  buggerall.Timeline = Timeline = (function() {
+    function Timeline(result, daysback) {
+      var bug, bugId, cutoff, events;
+      events = this.events = [];
+      cutoff = new Date().getTime() - 30 * 24 * 60 * 60 * 1000;
+      for (bugId in result) {
+        bug = result[bugId];
+        if ((bug.creation_time != null) && bug.creation_time.getTime() > cutoff) {
+          events.push(new buggerall.TimelineEntry(bugId, bug.creation_time, "newBug"));
+        }
+      }
+      events.sort(function(a, b) {
+        if (a.when < b.when) {
+          return 1;
+        } else if (a.when > b.when) {
+          return -1;
+        }
+        return 0;
+      });
+    }
+    return Timeline;
+  })();
+  buggerall.TimelineEntry = TimelineEntry = (function() {
+    function TimelineEntry(bugId, when, type, detail) {
+      this.bugId = bugId;
+      this.when = when;
+      this.type = type;
+      this.detail = detail;
+    }
+    return TimelineEntry;
+  })();
 }).call(this);

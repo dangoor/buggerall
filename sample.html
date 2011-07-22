@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Buggerall Simple Sample</title>
+        <script src="support/date.js"></script>
+        <script src="support/time.js"></script>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.2/jquery.min.js"></script>
+        <script src="buggerall.js"></script>
+
+        <script>
+            $(function() {
+                console.log("Starting query");
+
+                // CHANGE THE QUERY BELOW
+                // if you would like to see different results.
+                var query = new buggerall.Query({
+                    query: "product=Firefox&component=Developer%20Tools&whiteboard=[minotaur]"
+                });
+
+                query.run(function(query) {
+                    console.log("Result has arrived");
+                    var result = "<table><thead><th>bug</th><th>event type</th><th>timestamp</th><th>details</th></thead><tbody>";
+                    var timeline = query.timeline();
+                    timeline.events.forEach(function(event) {
+                        result += "<tr><td>" + event.bugId + "</td><td>" + event.type + "</td><td>" + event.when + "</td></tr>";
+                    });
+                    result += "</tbody></table>";
+
+                    console.log("Updating display");
+                    $("#result").html(result);
+                    $("#loading").hide();
+                });
+            });
+        </script>
+    </head>
+    <body>
+        <h1>Buggerall Sample</h1>
+        <div id="loading">
+            Running a live query against bugzilla.mozilla.org
+        </div>
+        <div>
+            This query, which may not always produce useful results, is searching for a specific
+            set of bugs in Bugzilla. Change the query in the JavaScript above to see different
+            results.
+        </div>
+        <div id="result">
+        </div>
+    </body>
+</html>
