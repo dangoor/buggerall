@@ -78,7 +78,7 @@ buggerall.Query = class Query
         # Special support for computing the latest comment, which requires making
         # separate requests in order to avoid download all of the comment data
         # which can be quite large.
-        @computeLatestComment = opts.computeLatestComment
+        @computeLastCommentTime = opts.computeLastCommentTime
         
         @result = undefined
 
@@ -122,6 +122,8 @@ buggerall.Query = class Query
             bug = result[bugData.id] = new Bug(bugData)
             if @includeHistory
                 @_loadHistory bug
+            if @computeLastCommentTime
+                @_getLatestComment bug
 
     _queryDone: () =>
         @_queryCount--
@@ -141,6 +143,13 @@ buggerall.Query = class Query
             url = @apiURL + "bug/" + bug.id + "/history"
             @getJSON url, (data) ->
                 bug._setHistoryFromQueryResult(data.history)
+    
+    _getLatestComment: (bug) ->
+        url = @apiURL + "bug/" + bug.id + "/comment?include_fields=creation_time,creator"
+        @getJSON url, (data) ->
+            lastComment = data.comments[data.comments.length - 1]
+            bug.lastCommentTime = Date.parse(lastComment.creation_time)
+            bug.lastCommentCreator = lastComment.creator.name
     
     merge: (otherQ) ->
         for bugId of otherQ.result
@@ -368,7 +377,7 @@ buggerall.Timeline = class Timeline
 
         for bugId, bug of result
             # check for new bug
-            if bug.creation_time? and bug.creation_time.getTime() > cutoff
+            if bug.creation_time? and bug.creation_time > cutoff
                 events.push(new TimelineEntry(bugId, bug.creation_time, "newBug", ""))
             
             # events pulled from bug history
@@ -399,6 +408,10 @@ buggerall.Timeline = class Timeline
                     if attachment.creation_time < cutoff or attachment.is_obsolete or not attachment.is_patch
                         continue
                     events.push(new TimelineEntry(bugId, attachment.creation_time, "newPatch", attachment.description))
+            
+            # handle latest comment event
+            if bug.lastCommentTime? and bug.lastCommentTime > cutoff
+                events.push(new TimelineEntry(bugId, bug.lastCommentTime, "newComment", "from " + bug.lastCommentCreator))
         
         # sort the final result in descending timestamp order
         # (most recent first)

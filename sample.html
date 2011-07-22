@@ -18,7 +18,8 @@
 
                 var query = new buggerall.Query({
                     query: queryString,
-                    fields: "id,creation_time,attachments,history"
+                    fields: "id,creation_time,attachments,history",
+                    computeLastCommentTime: true
                 });
 
                 query.run(function(query) {

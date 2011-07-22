@@ -63,7 +63,7 @@
       this.historyCacheURL = opts.historyCacheURL;
       this.includeHistory = opts.includeHistory;
       this.whitespace = opts.whitespace;
-      this.computeLatestComment = opts.computeLatestComment;
+      this.computeLastCommentTime = opts.computeLastCommentTime;
       this.result = void 0;
     }
     Query.prototype.getJSON = function(url, callback) {
@@ -112,7 +112,10 @@
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
         bugData = _ref[_i];
         bug = result[bugData.id] = new Bug(bugData);
-        _results.push(this.includeHistory ? this._loadHistory(bug) : void 0);
+        if (this.includeHistory) {
+          this._loadHistory(bug);
+        }
+        _results.push(this.computeLastCommentTime ? this._getLatestComment(bug) : void 0);
       }
       return _results;
     };
@@ -144,6 +147,16 @@
           return bug._setHistoryFromQueryResult(data.history);
         });
       }
+    };
+    Query.prototype._getLatestComment = function(bug) {
+      var url;
+      url = this.apiURL + "bug/" + bug.id + "/comment?include_fields=creation_time,creator";
+      return this.getJSON(url, function(data) {
+        var lastComment;
+        lastComment = data.comments[data.comments.length - 1];
+        bug.lastCommentTime = Date.parse(lastComment.creation_time);
+        return bug.lastCommentCreator = lastComment.creator.name;
+      });
     };
     Query.prototype.merge = function(otherQ) {
       var bugId, _results;
@@ -406,7 +419,7 @@
       reviewFlag = /^review([+-])$/;
       for (bugId in result) {
         bug = result[bugId];
-        if ((bug.creation_time != null) && bug.creation_time.getTime() > cutoff) {
+        if ((bug.creation_time != null) && bug.creation_time > cutoff) {
           events.push(new TimelineEntry(bugId, bug.creation_time, "newBug", ""));
         }
         if (bug.history != null) {
@@ -445,6 +458,9 @@
             }
             events.push(new TimelineEntry(bugId, attachment.creation_time, "newPatch", attachment.description));
           }
+        }
+        if ((bug.lastCommentTime != null) && bug.lastCommentTime > cutoff) {
+          events.push(new TimelineEntry(bugId, bug.lastCommentTime, "newComment", "from " + bug.lastCommentCreator));
         }
       }
       events.sort(function(a, b) {
