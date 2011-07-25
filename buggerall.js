@@ -393,7 +393,7 @@
       if (obj._type === "Date") {
         return Date.parse(obj.value);
       }
-      objData = new exports[obj._type]();
+      objData = new buggerall[obj._type]();
     } else {
       objData = {};
     }
