@@ -413,9 +413,12 @@ buggerall.Timeline = class Timeline
             if bug.lastCommentTime? and bug.lastCommentTime > cutoff
                 events.push(new TimelineEntry(bugId, bug.lastCommentTime, "newComment", "from " + bug.lastCommentCreator))
         
+        @sortEvents()
+    
+    sortEvents: () ->
         # sort the final result in descending timestamp order
         # (most recent first)
-        events.sort (a,b) ->
+        @events.sort (a,b) ->
             if a.when < b.when
                 return 1
             else if a.when > b.when

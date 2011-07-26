@@ -463,7 +463,10 @@
           events.push(new TimelineEntry(bugId, bug.lastCommentTime, "newComment", "from " + bug.lastCommentCreator));
         }
       }
-      events.sort(function(a, b) {
+      this.sortEvents();
+    }
+    Timeline.prototype.sortEvents = function() {
+      return this.events.sort(function(a, b) {
         if (a.when < b.when) {
           return 1;
         } else if (a.when > b.when) {
@@ -471,7 +474,7 @@
         }
         return 0;
       });
-    }
+    };
     return Timeline;
   })();
   buggerall.TimelineEntry = TimelineEntry = (function() {
